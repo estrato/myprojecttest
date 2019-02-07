@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tree Diagram</title>
+<style>
+html, body {
+  height: 100%;
+  width: 100%;
+}
+.node circle {
+  fill: #fff;
+  stroke: steelblue;
+  stroke-width: 1px;
+}
+.node rect {
+  stroke: #888;
+}
+.node text { font: 11px sans-serif; }
+.link {
+  fill: none;
+  stroke: #ccc;
+  stroke-width: 2px;
+}
+</style>
+</head>
+<body>
+
+<!-- load the d3.js library -->
+<script src="http://d3js.org/d3.v3.min.js"></script>
+
+<script>
+
+function getQueryParameterByName(name, url) {
+    if (!url) url = window.location.href;
+    name = name.replace(/[\[\]]/g, '\\$&');
+    var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)'),
+        results = regex.exec(url);
+    if (!results) return null;
+    if (!results[2]) return '';
+    return decodeURIComponent(results[2].replace(/\+/g, ' '));
+}
+
+// ************** Generate the tree diagram	 *****************
+
+// *** This is a modified version of http://bl.ocks.org/d3noob/8329447
+
+
+var minNodeWidth = 160;
+var minNodeHeight = 45;
+
+var tree = d3.layout.tree()
+  .separation(function(a,b) { return 1; })
+  .nodeSize([minNodeHeight, minNodeWidth]);
+
+var diagonal = d3.svg.diagonal()
+	.projection(function(d) { return [d.y, d.x]; });
+
+function getTextWidth(text) {
+  // re-use canvas object for better performance
+  var canvas = getTextWidth.canvas || (getTextWidth.canvas = document.createElement("canvas"));
+  var context = canvas.getContext("2d");
+  context.font = "11px sans-serif";
+  var metrics = context.measureText(text);
+  return metrics.width;
+}
+
+function nodeTextWidth(n) {
+  return n.data && n.data.text ? getTextWidth(n.data.text) : 0;
+}
+
+function getDepthOffset(d) {
+  var y = 0;
+  var p = d.parent;
+  while (p) {
+    var siblings = p.parent && p.parent.children ? p.parent.children : [];
+    var maxSiblingWidth = 0;
+    for (var i=0; i<siblings.length; i++) {
+      if (siblings[i].children) {
+        maxSiblingWidth = Math.max(maxSiblingWidth, nodeTextWidth(siblings[i]) + 40);
+      }
+    }
+    y += Math.max(minNodeWidth, maxSiblingWidth);
+    p = p.parent;
+  }
+  return Math.max(d.depth * minNodeWidth, y);
+}
+
+function diagonalWithOffset(d) {
+  if (d.source.data && d.source.data.text) {
+    return diagonal({
+      "source": {
+        "y": d.source.y + getTextWidth(d.source.data.text) + 16,
+        "x": d.source.x
+      },
+      "target": d.target
+    });
+  }
+  return diagonal(d);
+}
+
+var svg = d3.select("body").append("svg")
+	.attr("width", 0)
+	.attr("height", 0);
+
+var svgGroup = svg.append("g");
+
+// load the external data
+//d3.json("airflow-dmp-src.km", function(error, treeData) {
+d3.json(getQueryParameterByName("src"), function(error, treeData) {
+  if (treeData && treeData.root) {
+    update(treeData.root);
+  }
+});
+
+var id = 0;
+
+function update(root) {
+
+  // Compute the new tree layout.
+  var nodes = tree.nodes(root).reverse(),
+	  links = tree.links(nodes);
+
+  // Compute node depth placement and tree bounds.
+  var maxX = 0, maxY = 0, minX = 0;
+  nodes.forEach(function(d) {
+    d.id = d.id || (++id);
+    d.y = getDepthOffset(d);
+    maxX = Math.max(maxX, d.x);
+    minX = Math.min(minX, d.x);
+    maxY = Math.max(maxY, d.y);
+  });
+
+  // Resize and reposition SVG element and container group
+  svg.attr("width", maxY + 400)
+    .attr("height", maxX-minX+20+minNodeHeight)
+    .select("g")
+    .attr("transform", "translate(20,"+(20-minX)+")");
+
+  // Declare the nodes…
+  var node = svgGroup.selectAll("g.node")
+	  .data(nodes, function(d) { return d.id; });
+
+  // Enter the nodes.
+  var nodeEnter = node.enter().append("g")
+	  .attr("class", "node")
+	  .attr("transform", function(d) {
+		  return "translate(" + d.y + "," + d.x + ")"; });
+
+  nodeEnter.filter(function(d){ return d.children && d.children.length>1 && d.data && d.data.text; })
+    .append("circle")
+	  .attr("r", 5)
+	  .style("fill", "#fff");
+
+  nodeEnter.filter(function(d){ return d.children || (d.data && d.data.text && d.data.background); })
+    .append("rect")
+    .attr("width", function(d) { return nodeTextWidth(d)+8 })
+    .attr("height", 20)
+    .attr("x", 6)
+	  .attr("y", -10)
+    .attr("rx", 6)
+    .attr("ry", 6)
+    .attr("fill", function(d){
+      return d.data.background ||
+        ["#7dd", "#eef", "none"][Math.min(d.depth, 2)];
+    })
+    .attr("stroke-opacity", function(d) {
+      return d.depth < 2 ? "0.75" : "0";
+    })
+    .attr("stroke-width", function(d) {
+      return d.depth == 0 ? 2 : (d.data.background || d.depth < 2 ? "1" : "0");
+    })
+
+
+  nodeEnter.filter(function(d){ return d.data && d.data.text; })
+    .append("text")
+    .attr("x", 10)
+	  .attr("dy", "4px")
+	  .attr("text-anchor", "start")
+	  .text(function(d) { return d.data.text; })
+	  .style("fill-opacity", 1);
+
+  // Declare the links…
+  var link = svgGroup.selectAll("path.link")
+	  .data(links, function(d) { return d.target.id; });
+
+  // Enter the links.
+  link.enter().insert("path", "g")
+	  .attr("class", "link")
+	  .attr("d", diagonalWithOffset);
+
+}
+
+</script>
+
+</body>
+</html>
