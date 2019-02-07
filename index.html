@@ -22,30 +22,72 @@ html, body {
   stroke: #ccc;
   stroke-width: 2px;
 }
+fieldset {
+  border: none;
+}
 </style>
 </head>
 <body>
 
+  <div class="page-content">
+    <form id="jsonFile" name="jsonFile" enctype="multipart/form-data" method="post">
+      <fieldset>
+        <h3>Upload tree file (JSON):</h3>
+        <input type='file' id='fileinput'>
+        <input type='button' id='btnLoad' value='Import' onclick='loadFile();'>
+      </fieldset>
+    </form>
+  </div>
+
+  <svg></svg>
+
 <!-- load the d3.js library -->
-<script src="https://d3js.org/d3.v3.min.js"></script>
+<script src="http://d3js.org/d3.v3.min.js"></script>
 
 <script>
 
-function getQueryParameterByName(name, url) {
-    if (!url) url = window.location.href;
-    name = name.replace(/[\[\]]/g, '\\$&');
-    var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)'),
-        results = regex.exec(url);
-    if (!results) return null;
-    if (!results[2]) return '';
-    return decodeURIComponent(results[2].replace(/\+/g, ' '));
+var svg = d3.select("body").select("svg");
+var svgGroup = svg.append("g");
+
+function loadFile() {
+  var input, file, fr;
+  if (typeof window.FileReader !== 'function') {
+    alert("The file API isn't supported on this browser yet.");
+    return;
+  }
+  input = document.getElementById('fileinput');
+  if (!input) {
+    alert("Um, couldn't find the fileinput element.");
+  }
+  else if (!input.files) {
+    alert("This browser doesn't seem to support the `files` property of file inputs.");
+  }
+  else if (!input.files[0]) {
+    alert("Please select a file before clicking 'Import'");
+  }
+  else {
+    file = input.files[0];
+    fr = new FileReader();
+    fr.onload = receivedText;
+    fr.readAsText(file);
+
+    svg.attr("width", 0).attr("height", 0);
+  }
+}
+
+function receivedText(e) {
+  let lines = e.target.result;
+  let json = JSON.parse(lines);
+  if (json && json.root) {
+    update(json.root);
+  }
 }
 
 // ************** Generate the tree diagram	 *****************
 
 // *** This is a modified version of http://bl.ocks.org/d3noob/8329447
 
-
+var id = 0;
 var minNodeWidth = 160;
 var minNodeHeight = 45;
 
@@ -98,22 +140,6 @@ function diagonalWithOffset(d) {
   }
   return diagonal(d);
 }
-
-var svg = d3.select("body").append("svg")
-	.attr("width", 0)
-	.attr("height", 0);
-
-var svgGroup = svg.append("g");
-
-// load the external data
-//d3.json("airflow-dmp-src.km", function(error, treeData) {
-d3.json(getQueryParameterByName("src"), function(error, treeData) {
-  if (treeData && treeData.root) {
-    update(treeData.root);
-  }
-});
-
-var id = 0;
 
 function update(root) {
 
