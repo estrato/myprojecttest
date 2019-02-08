@@ -97,8 +97,8 @@ function getTextWidth(text) {
 // *** This is a modified version of http://bl.ocks.org/d3noob/8329447
 
 var id = 0;
-var minNodeWidth = 80;
-var minNodeHeight = 45;
+var minNodeWidth = 150;
+var minNodeHeight = 34;
 
 var tree = d3.layout.tree()
   .separation(function(a,b) { return 1; })
@@ -142,22 +142,22 @@ function update(root) {
     offset += textWidthsAtDepth[depth];
     depth++;
   }
+  var maxY = offset;
 
   // Set node depth placement and compute svg rect bounds.
-  var maxX = 0, maxY = 0, minX = 0;
+  var maxX = 0, minX = 0;
   nodes.forEach(function(d) {
     d.id = d.id || (++id);
     d.y = depthOffsets[d.depth];
     maxX = Math.max(maxX, d.x);
     minX = Math.min(minX, d.x);
-    maxY = Math.max(maxY, d.y);
   });
 
   // Resize and reposition SVG element and container group
-  svg.attr("width", maxY + 400)
-    .attr("height", maxX-minX+20+minNodeHeight)
+  svg.attr("width", Math.ceil(maxY + 40))
+    .attr("height", Math.ceil(maxX-minX+20+minNodeHeight/2))
     .select("g")
-    .attr("transform", "translate(20,"+(20-minX)+")");
+    .attr("transform", "translate(20,"+Math.ceil(20-minX)+")");
 
   // Declare the nodes…
   var node = svgGroup.selectAll("g.node")
