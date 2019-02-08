@@ -83,12 +83,21 @@ function receivedText(e) {
   }
 }
 
+function getTextWidth(text) {
+  // re-use canvas object for better performance
+  var canvas = getTextWidth.canvas || (getTextWidth.canvas = document.createElement("canvas"));
+  var context = canvas.getContext("2d");
+  context.font = "11px sans-serif";
+  var metrics = context.measureText(text || "");
+  return metrics.width;
+}
+
 // ************** Generate the tree diagram	 *****************
 
 // *** This is a modified version of http://bl.ocks.org/d3noob/8329447
 
 var id = 0;
-var minNodeWidth = 160;
+var minNodeWidth = 80;
 var minNodeHeight = 45;
 
 var tree = d3.layout.tree()
@@ -98,41 +107,15 @@ var tree = d3.layout.tree()
 var diagonal = d3.svg.diagonal()
 	.projection(function(d) { return [d.y, d.x]; });
 
-function getTextWidth(text) {
-  // re-use canvas object for better performance
-  var canvas = getTextWidth.canvas || (getTextWidth.canvas = document.createElement("canvas"));
-  var context = canvas.getContext("2d");
-  context.font = "11px sans-serif";
-  var metrics = context.measureText(text);
-  return metrics.width;
-}
-
-function nodeTextWidth(n) {
-  return n.data && n.data.text ? getTextWidth(n.data.text) : 0;
-}
-
-function getDepthOffset(d) {
-  var y = 0;
-  var p = d.parent;
-  while (p) {
-    var siblings = p.parent && p.parent.children ? p.parent.children : [];
-    var maxSiblingWidth = 0;
-    for (var i=0; i<siblings.length; i++) {
-      if (siblings[i].children) {
-        maxSiblingWidth = Math.max(maxSiblingWidth, nodeTextWidth(siblings[i]) + 40);
-      }
-    }
-    y += Math.max(minNodeWidth, maxSiblingWidth);
-    p = p.parent;
-  }
-  return Math.max(d.depth * minNodeWidth, y);
+function nodeTextWidth(d) {
+  return !d.data ? 0 : d.data.textWidth!=null ? d.data.textWidth : (d.data.textWidth = getTextWidth(d.data.text));
 }
 
 function diagonalWithOffset(d) {
-  if (d.source.data && d.source.data.text) {
+  if (nodeTextWidth(d.source)>0) {
     return diagonal({
       "source": {
-        "y": d.source.y + getTextWidth(d.source.data.text) + 16,
+        "y": d.source.y + nodeTextWidth(d.source) + 16,
         "x": d.source.x
       },
       "target": d.target
@@ -147,11 +130,24 @@ function update(root) {
   var nodes = tree.nodes(root).reverse(),
 	  links = tree.links(nodes);
 
-  // Compute node depth placement and tree bounds.
+  // Compute text width of each node and width at each level.
+  var depthOffsets = {};
+  var textWidthsAtDepth = {};
+  nodes.forEach(function(d) {
+    textWidthsAtDepth[d.depth] = Math.max(minNodeWidth, textWidthsAtDepth[d.depth] || 0, d.children ? nodeTextWidth(d)+30 : 0);
+  });
+  var depth = 0, offset = 0;
+  while (textWidthsAtDepth[depth]!=null) {
+    depthOffsets[depth] = offset;
+    offset += textWidthsAtDepth[depth];
+    depth++;
+  }
+
+  // Set node depth placement and compute svg rect bounds.
   var maxX = 0, maxY = 0, minX = 0;
   nodes.forEach(function(d) {
     d.id = d.id || (++id);
-    d.y = getDepthOffset(d);
+    d.y = depthOffsets[d.depth];
     maxX = Math.max(maxX, d.x);
     minX = Math.min(minX, d.x);
     maxY = Math.max(maxY, d.y);
@@ -180,7 +176,7 @@ function update(root) {
 
   nodeEnter.filter(function(d){ return d.children || (d.data && d.data.text && d.data.background); })
     .append("rect")
-    .attr("width", function(d) { return nodeTextWidth(d)+8 })
+    .attr("width", function(d) { return nodeTextWidth(d) + 8; })
     .attr("height", 20)
     .attr("x", 6)
 	  .attr("y", -10)
